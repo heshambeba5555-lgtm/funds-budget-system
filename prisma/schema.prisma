@@ -1,0 +1,178 @@
+// Prisma schema for صناديق خاصة وموازنة أعضاء هيئة التدريس ومعاونيهم
+// Designed by Hesham Mohamed Eid Abdel Salam - Faculty of Computers & AI, Beni-Suef University
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- إعدادات عامة ----------
+model Setting {
+  id        String   @id @default("global")
+  // بيانات الكلية والجامعة
+  universityName String @default("جامعة بني سويف")
+  facultyName    String @default("كلية الحاسبات والذكاء الاصطناعي")
+  deanName       String @default("")
+  directorName   String @default("هشام محمد عيد عبد السلام")
+  assistantDirectorName String @default("")
+  cadreOfficerName String @default("")
+  financialAffairsOfficerName String @default("")
+  // قوائم مرنة قابلة للتعديل (مثل اسم مسئول الكادر)
+  administrationName String @default("")
+  jobName            String @default("")
+  degreeName         String @default("")
+  academicYear   String @default("2025/2026")
+  month          String @default("")
+  day            String @default("")
+
+  // الشعارات
+  universityLogo String @default("") // base64 or url
+  facultyLogo    String @default("") // base64 or url
+  // موضع كل شعار على حدة (مرن) - right | left
+  universityLogoPosition String @default("right")
+  facultyLogoPosition    String @default("right")
+  // قديم للتوافق مع الإصدارات السابقة - right | left (يُستخدم فقط إذا لم تُضبط الحقول الجديدة)
+  logosPosition  String @default("right")
+
+  // اسم التقرير الافتراضي
+  currentReportName String @default("صناديق خاصة أعضاء هيئة التدريس ومعاونيهم")
+  // أسماء تقارير متعددة تظهر في الترويسة (JSON array) - اختيار متعدد
+  reportNames String @default("[]")
+
+  // التوقيعات تحت الشيت - JSON array of {label, name}
+  signatures String @default("[{\"label\":\"عميد الكلية\",\"name\":\"\"},{\"label\":\"مدير الكلية\",\"name\":\"\"},{\"label\":\"مسئول الشئون المالية\",\"name\":\"\"}]")
+
+  // أنواع الإجازات الحرمانية من المكافآت - JSON array of strings (أسماء أنواع الإجازات)
+  // من يأخذ إجازة من هذه الأنواع يُصفّر له كل المكافآت في صناديق/موازنة
+  forfeitingLeaveTypes String @default("[\"بدون مرتب\"]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------- قوائم منسدلة قابلة للتعديل ----------
+// key: report_names | cadre_officers | leave_types | degrees | reward_types | administrations | jobs
+model Dropdown {
+  id    String @id @default(cuid())
+  key   String
+  value String
+  order Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
+
+// ---------- المستخدمون والصلاحيات ----------
+model User {
+  id       String @id @default(cuid())
+  name     String
+  username String @unique
+  password String
+  role     String @default("viewer") // admin | manager | editor | viewer
+  permissions String @default("") // JSON string of permissions per tab
+  active   Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------- الإجازات ----------
+model Leave {
+  id          String @id @default(cuid())
+  doctorName  String
+  leaveType   String
+  fromDate    String
+  toDate      String
+  degree      String
+  // شروط المكافأة (JSON) - يمكن إضافة أكثر من شرط
+  // [{ rewardType, base, percent, value }]
+  conditions  String @default("[]")
+  notes       String @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ---------- بيانات الأعضاء (الداتا) ----------
+// kind: funds | budget
+model Member {
+  id        String @id @default(cuid())
+  kind      String // "funds" or "budget"
+  // Common columns
+  serial    String @default("")
+  code      String @default("") // م
+  // الأساسي و المربوط (عمودان منفصلان)
+  basic     String @default("") // الأساسي
+  bound     String @default("") // المربوط
+  basicSalary String @default("") // الأساسي المربوط (للتوافق - يُحسب = basic + bound)
+  exchangeNo  String @default("") // رقم الصرف
+  name        String @default("") // الاسم
+  administration String @default("") // الإدارة
+  degree      String @default("") // الدرجة
+  job         String @default("") // الوظيفة
+  nationalId  String @default("") // الرقم القومي
+  // Funds-specific
+  qualityReward String @default("") // مكافأة الجودة
+  extraHours    String @default("") // الساعات الزائدة
+  diff90        String @default("") // فروق 90 يوم
+  // Budget-specific
+  teachingReward String @default("") // مكافأة تدريس
+  percent200     String @default("") // الـ 200%
+  // Total
+  total       String @default("") // الإجمالي
+  // أعمدة إضافية (JSON)
+  extraColumns String @default("{}") // { col_key: value }
+  order       Int    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([kind])
+}
+
+// ---------- تعريف الأعمدة الإضافية لكل نوع ----------
+// kind: funds | budget
+model ColumnDef {
+  id        String @id @default(cuid())
+  kind      String
+  key       String
+  label     String
+  type      String @default("text") // text | number
+  order     Int    @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([kind])
+}
+
+// ---------- سجلات المقارنة ----------
+// kind: funds | budget
+model ComparisonRef {
+  id        String @id @default(cuid())
+  kind      String
+  referenceTotal String @default("") // الإجمالي المرجعي من PDF
+  sheetTotal   String @default("") // الإجمالي من الشيت
+  diff        String @default("")
+  report      String @default("") // تقرير الأخطاء
+  createdAt   DateTime @default(now())
+}
+
+// ---------- مكافآت الدرجات/الوظائف ----------
+// type: degree | job  (مبنية على الدرجة أو الوظيفة)
+// rewardType: percent | fixed  (نسبة من الأساسي أو مبلغ مقطوع)
+// amount: القيمة (نسبة مئوية إن كان percent أو مبلغ إن كان fixed)
+// category: quality | teaching | extra_hours | diff_90 | percent_200
+model Reward {
+  id        String @id @default(cuid())
+  type      String // degree | job
+  name      String // اسم الدرجة أو الوظيفة
+  category  String // quality | teaching | extra_hours | diff_90 | percent_200
+  rewardType String @default("fixed") // percent | fixed
+  amount    String @default("0") // نسبة% أو مبلغ مقطوع
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, name, category])
+}
